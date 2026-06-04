@@ -6,7 +6,14 @@ Bot worker — τρέχει 24/7 ανεξάρτητα από τον browser.
 import json
 import os
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from urllib.request import urlopen, Request as UReq
+
+TZ = ZoneInfo("Europe/Athens")
+
+def now_str():
+    return datetime.now(TZ).strftime("%H:%M:%S")
 
 LOG_FILE    = "/tmp/bot_log.txt"
 TRADES_FILE = "/tmp/bot_trades.json"
@@ -29,7 +36,7 @@ paper_trades  = {}
 
 # ── Helpers ────────────────────────────────────────────────
 def add_log(text):
-    line = f"[{time.strftime('%H:%M:%S')}]  {text}\n"
+    line = f"[{now_str()}]  {text}\n"
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(line)
     # keep last 600 lines
@@ -180,7 +187,7 @@ while True:
     tp_pct   = float(cfg["tp_pct"])
     sl_pct   = float(cfg["sl_pct"])
 
-    add_log(f"── Κύκλος {time.strftime('%H:%M:%S')} | {len(pairs)} ζεύγη ──")
+    add_log(f"── Κύκλος {now_str()} | {len(pairs)} ζεύγη ──")
 
     for pair in pairs:
         try:
@@ -204,7 +211,7 @@ while True:
                 pct=(d["price"]-en)/en*100 if dr=="LONG" else (en-d["price"])/en*100
                 if pct >= tp_pct:
                     add_log(f"  📊 {pair} {dr} {pct:+.2f}% KERDOS ✅")
-                    trades.append({"Ώρα":time.strftime("%H:%M:%S"),"Ζεύγος":pair,
+                    trades.append({"Ώρα":now_str(),"Ζεύγος":pair,
                         "Κατ/νση":dr,"Είσοδος":f"{en:.4f}","Έξοδος":f"{d['price']:.4f}",
                         "% P&L":f"{pct:+.2f}%","Αποτ/μα":"KERDOS ✅","Διάρκεια":f"{el:.0f}λ"})
                     save_trades(trades)
@@ -212,7 +219,7 @@ while True:
                     paper_trades.pop(pair, None)
                 elif pct <= -sl_pct:
                     add_log(f"  📊 {pair} {dr} {pct:+.2f}% ZIMIA ❌")
-                    trades.append({"Ώρα":time.strftime("%H:%M:%S"),"Ζεύγος":pair,
+                    trades.append({"Ώρα":now_str(),"Ζεύγος":pair,
                         "Κατ/νση":dr,"Είσοδος":f"{en:.4f}","Έξοδος":f"{d['price']:.4f}",
                         "% P&L":f"{pct:+.2f}%","Αποτ/μα":"ZIMIA ❌","Διάρκεια":f"{el:.0f}λ"})
                     save_trades(trades)
@@ -235,11 +242,11 @@ while True:
                     add_log(f"  📊 {pair} PAPER ΑΝΟΙΞΕ: {sig} @ {d['price']:.4f}")
                 tg((f"🟢 LONG — {pair}\nΤιμή: {d['price']:.4f}\n"
                     f"15m:{d['bull15']}↑  5m:{d['bull5']}↑  J15={d['j15']:.0f}\n"
-                    f"ΠΑΝΩ ⏰{time.strftime('%H:%M:%S')}")
+                    f"ΠΑΝΩ ⏰{now_str()}")
                    if sig=="LONG" else
                    (f"🔴 SHORT — {pair}\nΤιμή: {d['price']:.4f}\n"
                     f"15m:{d['bear15']}↓  5m:{d['bear5']}↓  J15={d['j15']:.0f}\n"
-                    f"ΚΑΤΩ ⏰{time.strftime('%H:%M:%S')}"))
+                    f"ΚΑΤΩ ⏰{now_str()}"))
             elif sig=="WAIT" and last in ("LONG","SHORT"):
                 if last=="SHORT" and d["j15"]<50:
                     tg(f"🔄 REVERSAL LONG — {pair}\n{d['price']:.4f}  J15={d['j15']:.0f}")
