@@ -30,10 +30,11 @@ if not _worker_alive():
     with open(_PID_FILE, "w") as f:
         f.write(str(proc.pid))
 
-LOG_FILE    = "/tmp/bot_log.txt"
-TRADES_FILE = "/tmp/bot_trades.json"
-CONFIG_FILE = "/tmp/bot_config.json"
-STOP_FILE   = "/tmp/bot_stop"
+LOG_FILE       = "/tmp/bot_log.txt"
+TRADES_FILE    = "/tmp/bot_trades.json"
+OPEN_FILE      = "/tmp/bot_open_trades.json"
+CONFIG_FILE    = "/tmp/bot_config.json"
+STOP_FILE      = "/tmp/bot_stop"
 
 ALL_PAIRS = ["NEAR_USDT","BTC_USDT","ETH_USDT","SOL_USDT",
              "BNB_USDT","XRP_USDT","DOGE_USDT","ADA_USDT"]
@@ -50,6 +51,14 @@ def read_trades():
     if not os.path.exists(TRADES_FILE): return []
     try:
         with open(TRADES_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def read_open_trades():
+    if not os.path.exists(OPEN_FILE): return []
+    try:
+        with open(OPEN_FILE, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return []
@@ -116,7 +125,25 @@ with tab_log:
                  height=440, label_visibility="hidden")
 
 with tab_trades:
+    open_trades = read_open_trades()
+    if open_trades:
+        st.subheader("🔓 Ανοικτές Θέσεις")
+        now_ts = time.time()
+        open_rows = []
+        for ot in open_trades:
+            el = (now_ts - ot["time"]) / 60
+            open_rows.append({
+                "Ζεύγος": ot["pair"],
+                "Κατ/νση": ot["direction"],
+                "Είσοδος": f"{ot['entry']:.4f}",
+                "Διάρκεια": f"{el:.0f}λ",
+                "Κατάσταση": "🔓 Ανοικτό",
+            })
+        st.dataframe(open_rows, use_container_width=True, hide_index=True)
+        st.divider()
+
     trades = read_trades()
+    st.subheader("📋 Κλειστές Θέσεις")
     if trades:
         st.dataframe(trades, use_container_width=True, hide_index=True)
         wins = sum(1 for t in trades if "KERDOS" in t.get("Αποτ/μα",""))
@@ -125,7 +152,7 @@ with tab_trades:
         cb.metric("Κέρδη ✅",  wins)
         cc.metric("Ζημίες ❌", len(trades)-wins)
     else:
-        st.info("Δεν υπάρχουν trades ακόμα.")
+        st.info("Δεν υπάρχουν κλειστά trades ακόμα.")
 
 # ── Auto-refresh κάθε 10 δευτ. ────────────────────────────
 time.sleep(10)

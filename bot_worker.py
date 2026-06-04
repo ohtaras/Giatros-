@@ -15,10 +15,11 @@ TZ = ZoneInfo("Europe/Athens")
 def now_str():
     return datetime.now(TZ).strftime("%H:%M:%S")
 
-LOG_FILE    = "/tmp/bot_log.txt"
-TRADES_FILE = "/tmp/bot_trades.json"
-CONFIG_FILE = "/tmp/bot_config.json"
-STOP_FILE   = "/tmp/bot_stop"
+LOG_FILE       = "/tmp/bot_log.txt"
+TRADES_FILE    = "/tmp/bot_trades.json"
+OPEN_FILE      = "/tmp/bot_open_trades.json"
+CONFIG_FILE    = "/tmp/bot_config.json"
+STOP_FILE      = "/tmp/bot_stop"
 
 BASE = "https://contract.mexc.com"
 
@@ -52,6 +53,18 @@ def add_log(text):
 def save_trades(trades):
     with open(TRADES_FILE, "w", encoding="utf-8") as f:
         json.dump(trades, f, ensure_ascii=False)
+
+def save_open_trades():
+    data = []
+    for pair, pt in paper_trades.items():
+        data.append({
+            "pair": pair,
+            "direction": pt["direction"],
+            "entry": pt["entry"],
+            "time": pt["time"],
+        })
+    with open(OPEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
 
 def load_trades():
     if os.path.exists(TRADES_FILE):
@@ -217,6 +230,7 @@ while True:
                     save_trades(trades)
                     tg(f"📊 {pair} PAPER — KERDOS ✅\n{dr} {en:.4f}→{d['price']:.4f}\n{pct:+.2f}%  {el:.0f}λ")
                     paper_trades.pop(pair, None)
+                    save_open_trades()
                 elif pct <= -sl_pct:
                     add_log(f"  📊 {pair} {dr} {pct:+.2f}% ZIMIA ❌")
                     trades.append({"Ώρα":now_str(),"Ζεύγος":pair,
@@ -225,6 +239,7 @@ while True:
                     save_trades(trades)
                     tg(f"📊 {pair} PAPER — ZIMIA ❌\n{dr} {en:.4f}→{d['price']:.4f}\n{pct:+.2f}%  {el:.0f}λ")
                     paper_trades.pop(pair, None)
+                    save_open_trades()
                 else:
                     add_log(f"  📊 {pair} {dr} @ {en:.4f} | {pct:+.2f}% | {el:.0f}λ")
 
@@ -240,6 +255,7 @@ while True:
                 if pair not in paper_trades:
                     paper_trades[pair] = {"direction":sig,"entry":d["price"],"time":time.time()}
                     add_log(f"  📊 {pair} PAPER ΑΝΟΙΞΕ: {sig} @ {d['price']:.4f}")
+                    save_open_trades()
                 tg((f"🟢 LONG — {pair}\nΤιμή: {d['price']:.4f}\n"
                     f"15m:{d['bull15']}↑  5m:{d['bull5']}↑  J15={d['j15']:.0f}\n"
                     f"ΠΑΝΩ ⏰{now_str()}")
