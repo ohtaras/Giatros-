@@ -20,6 +20,14 @@ ALL_PAIRS = ["NEAR_USDT","BTC_USDT","ETH_USDT","SOL_USDT",
 def bot_running():
     return not os.path.exists(STOP_FILE)
 
+def worker_status():
+    if not os.path.exists(LOG_FILE):
+        return "⚠️ Worker δεν έχει γράψει ακόμα"
+    age = time.time() - os.path.getmtime(LOG_FILE)
+    if age < 120:
+        return f"✅ Worker ενεργός (πριν {age:.0f}δ)"
+    return f"⚠️ Worker αδρανής ({age/60:.0f} λεπτά)"
+
 def read_log():
     if not os.path.exists(LOG_FILE): return []
     with open(LOG_FILE, "r", encoding="utf-8") as f:
@@ -53,6 +61,7 @@ with st.sidebar:
     st.title("⚙️ Ρυθμίσεις")
     st.caption(f"Token: {'✅ Set' if os.environ.get('TELEGRAM_TOKEN') else '❌ Missing'}")
     st.caption(f"Chat:  {'✅ Set' if os.environ.get('TELEGRAM_CHAT')  else '❌ Missing'}")
+    st.caption(worker_status())
     st.divider()
     sel_pairs = st.multiselect("Ζεύγη", options=ALL_PAIRS,
                                 default=cfg.get("pairs", ALL_PAIRS))
