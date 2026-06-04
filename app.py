@@ -43,13 +43,9 @@ with st.sidebar:
     telegram_chat  = st.text_input("Telegram Chat ID",
         value=os.environ.get("TELEGRAM_CHAT", ""), placeholder="-100123456789")
     st.divider()
-    PAIRS = [
-        "NEAR_USDT", "BTC_USDT", "ETH_USDT", "SOL_USDT",
-        "BNB_USDT", "XRP_USDT", "DOGE_USDT", "ADA_USDT",
-        "AVAX_USDT", "DOT_USDT", "LINK_USDT", "MATIC_USDT",
-        "TRX_USDT", "SHIB_USDT", "LTC_USDT", "ATOM_USDT",
-    ]
-    pair     = st.selectbox("Ζεύγος", options=PAIRS, index=PAIRS.index("NEAR_USDT"))
+    PAIRS = ["NEAR_USDT","BTC_USDT","ETH_USDT","SOL_USDT",
+             "BNB_USDT","XRP_USDT","DOGE_USDT","ADA_USDT"]
+    pair  = st.selectbox("Ζεύγος", options=PAIRS)
     interval = st.number_input("Interval (δευτ.)", value=60, min_value=10, step=10)
     tp_pct   = st.number_input("Take Profit %",    value=1.5, min_value=0.1, step=0.1, format="%.1f")
     sl_pct   = st.number_input("Stop Loss %",      value=1.0, min_value=0.1, step=0.1, format="%.1f")
