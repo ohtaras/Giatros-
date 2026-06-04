@@ -4,10 +4,31 @@ Signal Bot Dashboard — διαβάζει από αρχεία που γράφε�
 """
 import json
 import os
+import subprocess
+import sys
 import time
 import streamlit as st
 
 st.set_page_config(page_title="Signal Bot v4", page_icon="📈", layout="wide")
+
+# ── Auto-launch worker με το ίδιο Python (venv-safe) ───────
+_PID_FILE = "/tmp/worker_pid"
+
+def _worker_alive():
+    if not os.path.exists(_PID_FILE):
+        return False
+    try:
+        pid = int(open(_PID_FILE).read().strip())
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, ValueError):
+        return False
+
+if not _worker_alive():
+    worker_path = os.path.join(os.path.dirname(__file__), "bot_worker.py")
+    proc = subprocess.Popen([sys.executable, worker_path])
+    with open(_PID_FILE, "w") as f:
+        f.write(str(proc.pid))
 
 LOG_FILE    = "/tmp/bot_log.txt"
 TRADES_FILE = "/tmp/bot_trades.json"
