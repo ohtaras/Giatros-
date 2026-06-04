@@ -35,6 +35,25 @@ DEFAULT_CONFIG = {
 last_signals  = {}
 paper_trades  = {}
 
+def restore_open_trades():
+    if not os.path.exists(OPEN_FILE):
+        return
+    try:
+        with open(OPEN_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        for ot in data:
+            pair = ot["pair"]
+            paper_trades[pair] = {
+                "direction": ot["direction"],
+                "entry":     ot["entry"],
+                "time":      ot["time"],
+            }
+            last_signals[pair] = ot["direction"]
+        if paper_trades:
+            add_log(f"↩️ Αποκατάσταση {len(paper_trades)} ανοικτών trades από αρχείο")
+    except Exception as e:
+        add_log(f"ERR restore_open_trades: {e}")
+
 # ── Helpers ────────────────────────────────────────────────
 def add_log(text):
     line = f"[{now_str()}]  {text}\n"
@@ -187,6 +206,7 @@ add_log("Bot worker ξεκίνησε")
 add_log("="*44)
 
 trades = load_trades()
+restore_open_trades()
 
 while True:
     # Παύση αν υπάρχει STOP_FILE
