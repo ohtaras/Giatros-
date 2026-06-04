@@ -35,11 +35,13 @@ with st.sidebar:
 
     telegram_token = st.text_input(
         "Telegram Bot Token",
+        value=os.environ.get("TELEGRAM_TOKEN", ""),
         type="password",
         placeholder="123456789:AAF...",
     )
     telegram_chat = st.text_input(
         "Telegram Chat ID",
+        value=os.environ.get("TELEGRAM_CHAT", ""),
         placeholder="-100123456789",
     )
 
