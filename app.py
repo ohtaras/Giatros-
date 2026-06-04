@@ -262,8 +262,8 @@ tab_log, tab_trades = st.tabs(["📋 Live Log", "📊 Paper Trades"])
 with tab_log:
     with _shared["log_lock"]:
         lines = list(_shared["log"])
-    st.text_area("", value="\n".join(reversed(lines[-100:])),
-                 height=440, label_visibility="collapsed")
+    st.text_area("Log output", value="\n".join(reversed(lines[-100:])),
+                 height=440, label_visibility="hidden")
 
 with tab_trades:
     with _shared["trade_lock"]:
