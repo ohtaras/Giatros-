@@ -10,6 +10,9 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from urllib.request import urlopen, Request as UReq
 
+import numpy as np
+from arch import arch_model
+
 TZ = ZoneInfo("Europe/Athens")
 
 def now_str():
@@ -48,6 +51,8 @@ def restore_open_trades():
                 "direction": ot["direction"],
                 "entry":     ot["entry"],
                 "time":      ot["time"],
+                "garch_emoji": ot.get("garch_emoji","🟡"),
+                "garch_label": ot.get("garch_label","Άγνωστο"),
             }
             last_signals[pair] = ot["direction"]
         if paper_trades:
@@ -82,6 +87,8 @@ def save_open_trades():
             "direction": pt["direction"],
             "entry": pt["entry"],
             "time": pt["time"],
+            "garch_emoji": pt.get("garch_emoji","🟡"),
+            "garch_label": pt.get("garch_label","Άγνωστο"),
         })
     with open(OPEN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
@@ -174,6 +181,26 @@ def vol_spike(c15):
     avg  = sum(base)/len(base)
     return cur/avg if avg>0 else 1.0
 
+def garch_regime(cl):
+    """Πρόγνωση μεταβλητότητας με GARCH(1,1) — καθαρά πληροφοριακό, δεν επηρεάζει SL/TP/είσοδο."""
+    if len(cl) < 60:
+        return "🟡", "Άγνωστο", 1.0
+    try:
+        rets = np.diff(np.log(cl)) * 100
+        am  = arch_model(rets, vol="Garch", p=1, q=1, dist="normal", rescale=False)
+        res = am.fit(disp="off", show_warning=False)
+        fc  = res.forecast(horizon=1, reindex=False)
+        sigma_pred = float(fc.variance.values[-1, 0]) ** 0.5
+        hist_sigma = float(rets.std())
+        ratio = sigma_pred/hist_sigma if hist_sigma>0 else 1.0
+        if ratio >= 1.5:
+            return "🔴", "Αυξημένη", ratio
+        elif ratio >= 1.15:
+            return "🟡", "Μέτρια", ratio
+        return "🟢", "Χαμηλή", ratio
+    except Exception:
+        return "🟡", "Άγνωστο", 1.0
+
 def tg(text):
     tok = os.environ.get("TELEGRAM_TOKEN", "")
     cht = os.environ.get("TELEGRAM_CHAT",  "")
@@ -211,10 +238,12 @@ def analyze(pair):
     avg=sum(vols)/len(vols) if vols else 1
     vol=c15[-2]["v"]/avg if avg>0 else 0
     vspike=vol_spike(c15)
+    gemoji,glabel,gratio=garch_regime(cl15)
     return {"price":price,"bull15":bull15,"bear15":bear15,
             "bull5":bull5,"bear5":bear5,"j15":J15[-1],
             "rng":rng,"vol":vol,"vspike":vspike,"kdj15_bull":kdj15_bull,
-            "kdj15_bear":kdj15_bear,"kdj5_bull":kdj5_bull}
+            "kdj15_bear":kdj15_bear,"kdj5_bull":kdj5_bull,
+            "garch_emoji":gemoji,"garch_label":glabel,"garch_ratio":gratio}
 
 def decide(d):
     if d["bull15"]>=3 and d["bull5"]>=3:
@@ -261,7 +290,8 @@ while True:
                     f"5m:{d['bull5']}↑{d['bear5']}↓  "
                     f"{tag}  J15={d['j15']:.0f}  "
                     f"range={d['rng']:.0f}%  vol={d['vol']:.1f}x  "
-                    f"vspike={d['vspike']:.1f}x  → {sig}")
+                    f"vspike={d['vspike']:.1f}x  "
+                    f"garch={d['garch_emoji']}{d['garch_ratio']:.1f}x  → {sig}")
 
             # paper trade
             pt = paper_trades.get(pair)
@@ -269,11 +299,13 @@ while True:
                 en=pt["entry"]; dr=pt["direction"]
                 el=(time.time()-pt["time"])/60
                 pct=(d["price"]-en)/en*100 if dr=="LONG" else (en-d["price"])/en*100
+                gtxt = f"{pt.get('garch_emoji','🟡')} {pt.get('garch_label','Άγνωστο')}"
                 if pct >= tp_pct:
                     add_log(f"  📊 {pair} {dr} {pct:+.2f}% KERDOS ✅")
                     trades.append({"Ώρα":now_str(),"Ζεύγος":pair,
                         "Κατ/νση":dr,"Είσοδος":f"{en:.4f}","Έξοδος":f"{d['price']:.4f}",
-                        "% P&L":f"{pct:+.2f}%","Αποτ/μα":"KERDOS ✅","Διάρκεια":f"{el:.0f}λ"})
+                        "% P&L":f"{pct:+.2f}%","Αποτ/μα":"KERDOS ✅","Διάρκεια":f"{el:.0f}λ",
+                        "Μεταβλητότητα (είσοδος)":gtxt})
                     save_trades(trades)
                     tg(f"📊 {pair} PAPER — KERDOS ✅\n{dr} {en:.4f}→{d['price']:.4f}\n{pct:+.2f}%  {el:.0f}λ")
                     paper_trades.pop(pair, None)
@@ -282,7 +314,8 @@ while True:
                     add_log(f"  📊 {pair} {dr} {pct:+.2f}% ZIMIA ❌")
                     trades.append({"Ώρα":now_str(),"Ζεύγος":pair,
                         "Κατ/νση":dr,"Είσοδος":f"{en:.4f}","Έξοδος":f"{d['price']:.4f}",
-                        "% P&L":f"{pct:+.2f}%","Αποτ/μα":"ZIMIA ❌","Διάρκεια":f"{el:.0f}λ"})
+                        "% P&L":f"{pct:+.2f}%","Αποτ/μα":"ZIMIA ❌","Διάρκεια":f"{el:.0f}λ",
+                        "Μεταβλητότητα (είσοδος)":gtxt})
                     save_trades(trades)
                     tg(f"📊 {pair} PAPER — ZIMIA ❌\n{dr} {en:.4f}→{d['price']:.4f}\n{pct:+.2f}%  {el:.0f}λ")
                     paper_trades.pop(pair, None)
@@ -304,7 +337,8 @@ while True:
             if long_ok or short_ok:
                 last_signals[pair] = sig
                 if pair not in paper_trades:
-                    paper_trades[pair] = {"direction":sig,"entry":d["price"],"time":time.time()}
+                    paper_trades[pair] = {"direction":sig,"entry":d["price"],"time":time.time(),
+                                           "garch_emoji":d["garch_emoji"],"garch_label":d["garch_label"]}
                     add_log(f"  📊 {pair} PAPER ΑΝΟΙΞΕ: {sig} @ {d['price']:.4f}")
                     save_open_trades()
                 tg((f"🟢 LONG — {pair}\nΤιμή: {d['price']:.4f}\n"
