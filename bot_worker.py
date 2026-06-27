@@ -24,11 +24,12 @@ STOP_FILE      = "/tmp/bot_stop"
 BASE = "https://contract.mexc.com"
 
 DEFAULT_CONFIG = {
-    "pairs":    ["NEAR_USDT","BTC_USDT","ETH_USDT","SOL_USDT",
-                 "BNB_USDT","XRP_USDT","DOGE_USDT","ADA_USDT"],
-    "interval": 60,
-    "tp_pct":   1.5,
-    "sl_pct":   1.0,
+    "pairs":        ["NEAR_USDT","BTC_USDT","ETH_USDT","SOL_USDT",
+                      "BNB_USDT","XRP_USDT","DOGE_USDT","ADA_USDT"],
+    "interval":     60,
+    "tp_pct":       1.5,
+    "sl_pct":       1.0,
+    "vol_spike_max": 1.8,
 }
 
 # ── State per pair ─────────────────────────────────────────
@@ -150,6 +151,29 @@ def bias(cl, p):
             ma=sum(cl[i-p+1:i+1])/p; r.append((cl[i]-ma)/ma*100)
     return r
 
+def atr_series(cc, period=14):
+    trs=[]
+    for i in range(len(cc)):
+        if i==0:
+            trs.append(cc[i]["h"]-cc[i]["l"])
+        else:
+            pc=cc[i-1]["c"]
+            trs.append(max(cc[i]["h"]-cc[i]["l"],
+                           abs(cc[i]["h"]-pc), abs(cc[i]["l"]-pc)))
+    if len(trs)<period: return []
+    a=[sum(trs[:period])/period]
+    for tr in trs[period:]:
+        a.append((a[-1]*(period-1)+tr)/period)
+    return a
+
+def vol_spike(c15):
+    atrs = atr_series(c15, 14)
+    if len(atrs) < 20: return 1.0
+    cur  = atrs[-1]
+    base = atrs[-20:-1]
+    avg  = sum(base)/len(base)
+    return cur/avg if avg>0 else 1.0
+
 def tg(text):
     tok = os.environ.get("TELEGRAM_TOKEN", "")
     cht = os.environ.get("TELEGRAM_CHAT",  "")
@@ -186,9 +210,10 @@ def analyze(pair):
     vols=[c["v"] for c in c15[-22:-2]]
     avg=sum(vols)/len(vols) if vols else 1
     vol=c15[-2]["v"]/avg if avg>0 else 0
+    vspike=vol_spike(c15)
     return {"price":price,"bull15":bull15,"bear15":bear15,
             "bull5":bull5,"bear5":bear5,"j15":J15[-1],
-            "rng":rng,"vol":vol,"kdj15_bull":kdj15_bull,
+            "rng":rng,"vol":vol,"vspike":vspike,"kdj15_bull":kdj15_bull,
             "kdj15_bear":kdj15_bear,"kdj5_bull":kdj5_bull}
 
 def decide(d):
@@ -215,10 +240,11 @@ while True:
         continue
 
     cfg = read_config()
-    pairs    = cfg["pairs"]
-    interval = int(cfg["interval"])
-    tp_pct   = float(cfg["tp_pct"])
-    sl_pct   = float(cfg["sl_pct"])
+    pairs       = cfg["pairs"]
+    interval    = int(cfg["interval"])
+    tp_pct      = float(cfg["tp_pct"])
+    sl_pct      = float(cfg["sl_pct"])
+    vspike_max  = float(cfg.get("vol_spike_max", 1.8))
 
     add_log(f"── Κύκλος {now_str()} | {len(pairs)} ζεύγη ──")
 
@@ -234,7 +260,8 @@ while True:
                     f"15m:{d['bull15']}↑{d['bear15']}↓  "
                     f"5m:{d['bull5']}↑{d['bear5']}↓  "
                     f"{tag}  J15={d['j15']:.0f}  "
-                    f"range={d['rng']:.0f}%  vol={d['vol']:.1f}x  → {sig}")
+                    f"range={d['rng']:.0f}%  vol={d['vol']:.1f}x  "
+                    f"vspike={d['vspike']:.1f}x  → {sig}")
 
             # paper trade
             pt = paper_trades.get(pair)
@@ -267,8 +294,12 @@ while True:
             last  = last_signals.get(pair, "WAIT")
             fresh = last == "WAIT"
             vok   = d["vol"] >= 1.5
-            long_ok  = sig=="LONG"  and fresh and d["j15"]<70 and d["rng"]<80 and d["bull15"]>=3 and vok
-            short_ok = sig=="SHORT" and fresh and d["j15"]>30 and d["rng"]>20 and d["bear15"]>=3 and vok
+            calm  = d["vspike"] <= vspike_max
+            long_ok  = sig=="LONG"  and fresh and d["j15"]<70 and d["rng"]<80 and d["bull15"]>=3 and vok and calm
+            short_ok = sig=="SHORT" and fresh and d["j15"]>30 and d["rng"]>20 and d["bear15"]>=3 and vok and calm
+
+            if (sig=="LONG" or sig=="SHORT") and fresh and not calm:
+                add_log(f"  ⚠️ {pair} σήμα {sig} αγνοήθηκε — μη φυσιολογική μεταβλητότητα ({d['vspike']:.1f}x)")
 
             if long_ok or short_ok:
                 last_signals[pair] = sig

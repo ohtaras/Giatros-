@@ -74,7 +74,8 @@ def load_config():
                 return json.load(f)
         except Exception:
             pass
-    return {"pairs": ALL_PAIRS, "interval": 60, "tp_pct": 1.5, "sl_pct": 1.0}
+    return {"pairs": ALL_PAIRS, "interval": 60, "tp_pct": 1.5, "sl_pct": 1.0,
+            "vol_spike_max": 1.8}
 
 cfg = load_config()
 
@@ -92,9 +93,14 @@ with st.sidebar:
                                  min_value=0.1, step=0.1, format="%.1f")
     sl_pct    = st.number_input("Stop Loss %",      value=cfg.get("sl_pct",1.0),
                                  min_value=0.1, step=0.1, format="%.1f")
+    vspike_max = st.number_input("Όριο μεταβλητότητας (vol-spike x)",
+                                  value=cfg.get("vol_spike_max",1.8),
+                                  min_value=1.0, step=0.1, format="%.1f",
+                                  help="Αν η τρέχουσα διακύμανση (ATR) ξεπερνά αυτό το πολλαπλάσιο της κανονικής, το σήμα αγνοείται.")
     if st.button("💾 Αποθήκευση ρυθμίσεων", use_container_width=True):
         save_config({"pairs":sel_pairs,"interval":interval,
-                     "tp_pct":tp_pct,"sl_pct":sl_pct})
+                     "tp_pct":tp_pct,"sl_pct":sl_pct,
+                     "vol_spike_max":vspike_max})
         st.success("Αποθηκεύτηκε!")
 
 # ── Header ─────────────────────────────────────────────────
