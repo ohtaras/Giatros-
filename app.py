@@ -74,8 +74,7 @@ def load_config():
                 return json.load(f)
         except Exception:
             pass
-    return {"pairs": ALL_PAIRS, "interval": 60, "tp_pct": 1.5, "sl_pct": 1.0,
-            "vol_spike_max": 1.8}
+    return {"pairs": ALL_PAIRS, "interval": 60, "tp_pct": 1.5, "sl_pct": 1.0}
 
 cfg = load_config()
 
@@ -93,15 +92,27 @@ with st.sidebar:
                                  min_value=0.1, step=0.1, format="%.1f")
     sl_pct    = st.number_input("Stop Loss %",      value=cfg.get("sl_pct",1.0),
                                  min_value=0.1, step=0.1, format="%.1f")
-    vspike_max = st.number_input("Όριο μεταβλητότητας (vol-spike x)",
-                                  value=cfg.get("vol_spike_max",1.8),
-                                  min_value=1.0, step=0.1, format="%.1f",
-                                  help="Αν η τρέχουσα διακύμανση (ATR) ξεπερνά αυτό το πολλαπλάσιο της κανονικής, το σήμα αγνοείται.")
     if st.button("💾 Αποθήκευση ρυθμίσεων", use_container_width=True):
         save_config({"pairs":sel_pairs,"interval":interval,
-                     "tp_pct":tp_pct,"sl_pct":sl_pct,
-                     "vol_spike_max":vspike_max})
+                     "tp_pct":tp_pct,"sl_pct":sl_pct})
         st.success("Αποθηκεύτηκε!")
+
+    st.divider()
+    if st.button("🗑️ Μηδενισμός trades", use_container_width=True, type="secondary"):
+        import signal as _signal
+        with open(TRADES_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f)
+        with open(OPEN_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f)
+        if os.path.exists(_PID_FILE):
+            try:
+                pid = int(open(_PID_FILE).read().strip())
+                os.kill(pid, _signal.SIGTERM)
+            except Exception:
+                pass
+            os.remove(_PID_FILE)
+        st.success("Trades μηδενίστηκαν!")
+        st.rerun()
 
 # ── Header ─────────────────────────────────────────────────
 st.title("📈 Signal Bot v4")
@@ -345,6 +356,51 @@ with tab_journal:
 *Σημείωση: τα παραπάνω αντλήθηκαν από CSV εξαγωγή 385 ιστορικών paper
 trades, πριν την προσθήκη του φίλτρου ATR vol-spike και του δείκτη
 GARCH. Χρησιμεύει ως σημείο αναφοράς "πριν" για μελλοντική σύγκριση.*
+
+---
+
+## 📓 Journal — Αξιολόγηση ATR vol-spike filter (01/07/2026)
+
+**Δείγμα:** 42 trades μετά την ενεργοποίηση του ATR vol-spike filter.
+
+| | Με ATR filter (42 trades) | Baseline χωρίς filter (385 trades) |
+|---|---|---|
+| Win rate | **21.4%** | 52.5% |
+| Συνολικό P&L | **-18.55%** | +7.80% |
+
+**Αποτελέσματα κατά ζεύγος (με ATR filter):**
+
+| Ζεύγος | Trades | Win rate | P&L |
+|---|---|---|---|
+| BTC_USDT  | 5 | 40% | +0.99% |
+| SOL_USDT  | 5 | 40% | +0.69% |
+| NEAR_USDT | 8 | 25% | -1.97% |
+| XRP_USDT  | 2 | 0%  | -2.13% |
+| DOGE_USDT | 5 | 20% | -3.05% |
+| BNB_USDT  | 3 | 0%  | -3.33% |
+| ETH_USDT  | 4 | 0%  | -4.63% |
+| ADA_USDT  | 10 | 20% | -5.12% |
+
+**Ανάλυση GARCH (πληροφοριακά):**
+
+| Μεταβλητότητα | Trades | Win rate | P&L |
+|---|---|---|---|
+| 🟢 Χαμηλή    | 33 | 27% | -8.00% |
+| 🟡 Μέτρια    | 5  | 0%  | -5.84% |
+| 🔴 Αυξημένη  | 4  | 0%  | -4.71% |
+
+**Συμπέρασμα:**
+
+Το φίλτρο ATR επέτρεπε είσοδο μόνο σε "ήρεμες" συνθήκες (79% των
+trades ήταν 🟢 Χαμηλή). Ωστόσο ακόμα και αυτές οι εισόδους έχασαν
+κατά 73% — πολύ κάτω από το θεωρητικό break-even (40% wr). Αυτό
+υποδηλώνει ότι η στρατηγική momentum χρειάζεται κάποια ελάχιστη κίνηση
+για να δουλέψει: σε υπερβολικά ήρεμη αγορά οι δείκτες βγάζουν
+συνεχώς ψεύτικα σήματα.
+
+**Απόφαση (01/07/2026):** αφαίρεση του ATR vol-spike filter και
+επαναφορά στη βασική λογική εισόδου. Τα trades μηδενίστηκαν για
+καθαρή σύγκριση.
 """)
 
 # ── Auto-refresh κάθε 10 δευτ. ────────────────────────────
